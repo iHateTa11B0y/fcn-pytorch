@@ -42,13 +42,12 @@ class UpPathModule(nn.Module):
         self.net = net
 
     def forward(self, x, lateral):
-        print(x.shape, lateral.shape)
         x = self.upconv(x)
-        print(x.shape)
+        #print(x.shape)
         diffY = - x.size()[2] + lateral.size()[2]
         diffX = - x.size()[3] + lateral.size()[3]
         x = F.pad(x, [diffX // 2, diffX - diffX // 2, diffY // 2, diffY - diffY // 2])
-        print(x.shape)
+        #print(x.shape)
         x = torch.cat([x, lateral], dim=1)
         return self.net(x)
 
@@ -84,10 +83,7 @@ class UpPath(nn.Module):
         for i in range(self.stage_num):
             sn = self.stage_num - 1 - i
             stagei = getattr(self, 'up_stage_{}'.format(sn))
-            print('up_stage_{}'.format(sn))
-            print(x.shape)
             x = stagei(x, lateral_res[sn])
-            print(x.shape)
         return x
 
 
@@ -122,8 +118,6 @@ class Unet(nn.Module):
         resx = self.net_dp(x)
         x = self.bottom(resx[-1])
         x = self.net_up(x, resx)
-        print(x.shape)
-        print(self.outconv(x).shape)
         return self.outconv(x)
 
 

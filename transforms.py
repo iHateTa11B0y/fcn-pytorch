@@ -1,4 +1,5 @@
 from cvtorch import cvTransforms as cvT
+from cvtorch.cvFunctional import ColorJitter
 import cv2
 
 class Resize(object):
@@ -22,19 +23,16 @@ def build_transforms(image_loader="OPENCV"):
     std = [1., 1., 1.]
 
     normalize_transform = cvT.NormalizeAsTorch(mean, std)
-
-    color_jitter = cvT.ColorJitter(
-        brightness=brightness,
-        contrast=contrast,
-        saturation=saturation,
-        hue=hue,
-    )
-
-    
+    #color_jitter = cvT.ColorJitter(
+    #    brightness=brightness,
+    #    contrast=contrast,
+    #    saturation=saturation,
+    #    hue=hue,
+    #)
 
     transforms = cvT.Compose(
 	[
-		color_jitter,
+		#color_jitter,
 		Resize(rsize),
 		#cvT.RandomHorizontalFlip(0.5),
 		#cvT.RandomVerticalFlip(0.5),

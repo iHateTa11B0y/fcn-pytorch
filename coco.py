@@ -193,21 +193,29 @@ class COCODataset(CocoDetection):
             masks = SegmentationMask(masks, (wid, h))
             #masks = [mask_utils.decode(mask_utils.frPyObjects(m, h, wid)) for m in masks]
             target.add_field("masks", masks)
-
-        target = target.clip_to_image(remove_empty=True)
-
+        #print(len(target))
+        #print(target.bbox)
+        #target = target.clip_to_image(remove_empty=True)
+        #print(len(target))
         if self._transforms is not None:
             img, target = self._transforms(img, target)
             #self.show_image(img, target)
+        #print(len(target))
         return img.unsqueeze(0), target, idx
 
 
 if __name__=='__main__':
     import cv2
-    df = '/core1/data/home/liuhuawei/data-manager/data/background/coco_background_all_train_new.json'
-    cd = COCODataset(df, '', True, clamp=False)
+    from transforms import build_transforms
+    df = '/home/core/tiny_bg.json'
+    cd = COCODataset(df, '', True, transforms=build_transforms(),clamp=False)
     for im, targets, idx in cd:
         print(im.shape, targets.get_field('masks').get_mask_tensor().shape)
         for m in targets.get_field('masks'):
-            cv2.imshow('test', im*m.get_mask_tensor().unsqueeze(2).numpy())
+            show = 255 * im * m.get_mask_tensor()
+            show = show.numpy().astype(np.uint8)
+            print(show)
+            print(show.shape)
+            print(show.dtype)
+            cv2.imshow('test', show)
             cv2.waitKey()
