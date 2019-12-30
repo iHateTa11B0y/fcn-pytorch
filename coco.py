@@ -201,7 +201,11 @@ class COCODataset(CocoDetection):
             img, target = self._transforms(img, target)
             #self.show_image(img, target)
         #print(len(target))
-        return img.unsqueeze(0), target, idx
+        target_m = []
+        for m in target.get_field('masks'):
+            target_m.append(m.get_mask_tensor().unsqueeze(0))
+        masks_target = torch.cat(target_m, dim=0).squeeze(0)
+        return img, masks_target, idx
 
 
 if __name__=='__main__':
