@@ -10,6 +10,46 @@ from torch.utils.data import DataLoader, random_split
 from optimizer import OptimizerScheduler
 from logger import Logger
 
+def get_world_size():
+    if not torch.distributed.is_available():
+        return 1
+    if not torch.distributed.is_initialized():
+        return 1
+    return torch.distributed.get_world_size()
+
+def get_rank():
+    if not torch.distributed.is_available():
+        return 0
+    if not torch.distributed.is_initialized():
+        return 0
+    return torch.distributed.get_rank()
+
+def is_main_process():
+    return get_rank() == 0
+
+def reduce_loss_dict(loss_dict):
+    """
+    Reduce the loss dictionary from all processes so that process with rank
+    0 has the averaged results. Returns a dict with the same fields as
+    loss_dict, after reduction.
+    """
+    world_size = get_world_size()
+    if world_size < 2:
+        return loss_dict
+    with torch.no_grad():
+        loss_names = []
+        all_losses = []
+        for k in sorted(loss_dict.keys()):
+            loss_names.append(k)
+            all_losses.append(loss_dict[k])
+        all_losses = torch.stack(all_losses, dim=0)
+        torch.distributed.reduce(all_losses, dst=0)
+        if torch.distributed.get_rank() == 0:
+            # only main process gets accumulated, so only divide by
+            # world_size in this case
+            all_losses /= world_size
+        reduced_losses = {k: v for k, v in zip(loss_names, all_losses)}
+    return reduced_losses
 
 def train_net(
               cfg,
@@ -28,20 +68,22 @@ def train_net(
                 images = images.cuda(cfg.GPU, non_blocking=True)
             targets = targets.cuda(cfg.GPU, non_blocking=True)
             
-            loss = model(images, targets) 
+            loss_dict = model(images, targets) 
+            losses = sum(loss for loss in loss_dict.values())
  
             optimizer.zero_grad()
-            loss.backward()
+            losses.backward()
             optimizer.step(total_iter)
             
-            logg.log(total_iter, loss=loss.item(), lr=optimizer.lr)
+            loss_dict_reduced = reduce_loss_dict(loss_dict)
+            losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+            logg.log(total_iter, loss=losses_reduced.item(), lr=optimizer.lr)
 
-            if iteration % 10 == 0:
-                flag = not cfg.MULTIPROCESSING_DISTRIBUTED or (cfg.MULTIPROCESSING_DISTRIBUTED and cfg.RANK % ngpus_per_node == 0)
-                logg.wait(flag, flush=True)
+            if total_iter % 20 == 0 and torch.distributed.get_rank() == 0:
+                logg.wait(total_iter, flush=False)
 
         if not cfg.MULTIPROCESSING_DISTRIBUTED or (cfg.MULTIPROCESSING_DISTRIBUTED and cfg.RANK % ngpus_per_node == 0):
-            torch.save(model.state_dict(), 'model_epoch_{}.pth'.format(i))
+            torch.save(model.state_dict(), cfg.OUTPUT+'/model_epoch_{}.pth'.format(i))
 
 def train_worker(gpu, ngpus_per_node, distributed, cfg):
 
@@ -146,16 +188,17 @@ if __name__=='__main__':
     _C.RANK = -1
     _C.DIST_BACKEND = 'nccl'
     _C.WORKERS = 8
+    _C.OUTPUT = 'weights'
 
     _C.DATA = CN()
-    _C.DATA.TRAINSET = "/core1/data/home/niuwenhao/data/tiny_bg.json"
+    _C.DATA.TRAINSET = "/core1/data/home/niuwenhao/workspace/data/detection/door_all_new.json"
     _C.DATA.VAL_RATIO = 0.1
 
     _C.SOLVER = CN()
-    _C.SOLVER.LR = 0.1
+    _C.SOLVER.LR = 0.02
     _C.SOLVER.BATCH_SIZE = 4
-    _C.SOLVER.STEPS = (100, 200, 300)
-    _C.SOLVER.EPOCH = 10
+    _C.SOLVER.STEPS = (16000, 20000)
+    _C.SOLVER.EPOCH = 12
     _C.SOLVER.MOMENTUM = 0.9
     _C.SOLVER.WEIGHT_DECAY = 1e-4
 

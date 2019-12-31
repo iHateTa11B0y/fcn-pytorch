@@ -8,12 +8,18 @@ class Logger(object):
         self.iter = -1
         self.epoch = None
         self.init_print = True
+        self.multiprocessing_cnt = 1
+        self.last_iter = 0
+        self.last_cnt = self.multiprocessing_cnt
 
     def add(self, name):
         self.log_info[name] = []
 
     def get(self, name):
         return self.log_info[name]
+
+    def set_multiprocessing_cnt(self, v):
+        self.multiprocessing_cnt = v
 
     def log(self, iteration, **kwargs):
 
@@ -30,18 +36,17 @@ class Logger(object):
                 print('unknow log key word "{}". pls add first.'.format(k))
                 raise ValueError
 
-    def wait(self, flag, flush=False):
-        if flag:
-            self.print_log(flush)
-        else:
-            return
+    def wait(self, iteration, flush=False):
+        
+        self.print_log(flash_back=self.iter-iteration, flush=flush)
+        return
 
-    def print_log(self, flush=False):
+    def print_log(self, flash_back=0, flush=False):
         if len(self.log_info) <= 0:
             return
         if not flush:
-            print('#[iter {:<5d}] '.format(self.iter))
-            print({k:v[-1] for k,v in self.log_info.items()})
+            print('#[iter {:<5d}] '.format(self.iter-flash_back))
+            print({k:v[-1-flash_back] for k,v in self.log_info.items()})
         else:
             s = '\n+' + '-' * 62 + '+\n|' + 'iter {:<57d}'.format(self.iter) + '|\n' + '+' + '-' * 62 + '+\n'
             line = ['', '', '', '', '', '']

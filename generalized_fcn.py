@@ -19,7 +19,7 @@ class GeneralizedFCN(nn.Module):
             #for m in targets.get_field('masks'):
             #    targets_m.append(m.get_mask_tensor())
             loss = F.binary_cross_entropy_with_logits(res, targets.unsqueeze(1).float())
-            return loss
+            return {'mask_loss': loss}
 
         return res
         
