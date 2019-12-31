@@ -32,7 +32,7 @@ def train():
     lr = 0.1
     epoch = 10
     val_ratio = 0.1
-    batch_size = 1
+    batch_size = 2
 
     model = GeneralizedFCN()
 
