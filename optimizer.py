@@ -1,11 +1,14 @@
 from torch import optim
 
 class OptimizerScheduler(object):
-    def __init__(self, model, base_lr, steps):
+    def __init__(self, model, cfg):
         super(OptimizerScheduler, self).__init__()
-        self.optimizer = optim.RMSprop(model.parameters(), lr=base_lr, weight_decay=1e-8)
-        self.lr = base_lr
-        self.steps = steps
+        self.optimizer = optim.SGD(model.parameters(), 
+                                  lr=cfg.SOLVER.LR, 
+                                  momentum=cfg.SOLVER.MOMENTUM,
+                                  weight_decay=cfg.SOLVER.WEIGHT_DECAY)
+        self.lr = cfg.SOLVER.LR
+        self.steps = cfg.SOLVER.STEPS
 
     def zero_grad(self):
         self.optimizer.zero_grad()

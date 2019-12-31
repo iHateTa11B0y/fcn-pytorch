@@ -30,7 +30,13 @@ class Logger(object):
                 print('unknow log key word "{}". pls add first.'.format(k))
                 raise ValueError
 
-    def print(self, flush=False):
+    def wait(self, flag, flush=False):
+        if flag:
+            self.print_log(flush)
+        else:
+            return
+
+    def print_log(self, flush=False):
         if len(self.log_info) <= 0:
             return
         if not flush:
@@ -68,7 +74,7 @@ if __name__=='__main__':
     for i in range(100):
         #logger.log(i, a=i,b=i+1,c=i+2,d=i+3)
         logger.log(i, a=i)
-        logger.print(flush=True)
+        logger.print_log(flush=True)
         time.sleep(0.1)
 
 

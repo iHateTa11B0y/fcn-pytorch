@@ -1,62 +1,165 @@
+import warnings
+import os
 from coco import COCODataset
 import torch
 from generalized_fcn import GeneralizedFCN
 from torch import optim
+import torch.backends.cudnn as cudnn
 from transforms import build_transforms
 from torch.utils.data import DataLoader, random_split
 from optimizer import OptimizerScheduler
 from logger import Logger
 
 
-def train_net(model, 
+def train_net(
+              cfg,
+              ngpus_per_node,
+              model, 
               data_loader,
               optimizer,
-              device,
-              epoch,
               logg,
               ):
-    model.to(device)
     model.train()
-    for i in range(epoch):
+    for i in range(cfg.SOLVER.EPOCH):
         epoch_iter = len(data_loader)
         for iteration, (images, targets, _) in enumerate(data_loader):
+            total_iter = i * epoch_iter + iteration
+            if cfg.GPU is not None:
+                images = images.cuda(cfg.GPU, non_blocking=True)
+            targets = targets.cuda(cfg.GPU, non_blocking=True)
             
-            images = images.to(device)
-            targets = targets.to(device)
             loss = model(images, targets) 
  
             optimizer.zero_grad()
             loss.backward()
-            optimizer.step(iteration)
+            optimizer.step(total_iter)
             
-            logg.log(i * epoch_iter + iteration, loss=loss.item())
+            logg.log(total_iter, loss=loss.item(), lr=optimizer.lr)
 
             if iteration % 10 == 0:
-                logg.print(flush=True)
-        torch.save(model.state_dict(), 'model_epoch_{}.pth'.format(i))
+                flag = not cfg.MULTIPROCESSING_DISTRIBUTED or (cfg.MULTIPROCESSING_DISTRIBUTED and cfg.RANK % ngpus_per_node == 0)
+                logg.wait(flag, flush=True)
 
-def train():
-    json_file = "/core1/data/home/niuwenhao/data/tiny_bg.json"
-    lr = 0.1
-    epoch = 10
-    val_ratio = 0.1
-    batch_size = 2
-    steps = [100,200,300]
+        if not cfg.MULTIPROCESSING_DISTRIBUTED or (cfg.MULTIPROCESSING_DISTRIBUTED and cfg.RANK % ngpus_per_node == 0):
+            torch.save(model.state_dict(), 'model_epoch_{}.pth'.format(i))
+
+def train_worker(gpu, ngpus_per_node, distributed, cfg):
 
     logg = Logger()
     logg.add('loss')
+    logg.add('lr')
+
+    cfg.GPU = gpu
+
+    if cfg.GPU is not ():
+        print("Use GPU: {} for training".format(cfg.GPU))
+
+    if distributed:
+        if cfg.DIST_URL == "env://" and cfg.RANK == -1:
+            cfg.RANK = int(os.environ["RANK"])
+        if cfg.MULTIPROCESSING_DISTRIBUTED:
+            cfg.RANK = cfg.RANK * ngpus_per_node + gpu
+        torch.distributed.init_process_group(
+                backend=cfg.DIST_BACKEND, 
+                init_method=cfg.DIST_URL,
+                world_size=cfg.WORLD_SIZE, 
+                rank=cfg.RANK)
+
 
     model = GeneralizedFCN()
 
-    data_set = COCODataset(json_file, '', True, transforms=build_transforms(), clamp=False)
+    if distributed:
+        if cfg.GPU is not ():
+            torch.cuda.set_device(cfg.GPU)
+            model.cuda(cfg.GPU)
+            cfg.SOLVER.BATCH_SIZE = int(cfg.SOLVER.BATCH_SIZE / ngpus_per_node)
+            cfg.WORKERS = int(cfg.WORKERS / ngpus_per_node)
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[cfg.GPU])
+        else:
+            model.cuda()
+            model = torch.nn.parallel.DistributedDataParallel(model)
+    elif cfg.GPU is not ():
+        torch.cuda.set_device(cfg.GPU)
+        model = model.cuda(cfg.GPU)
+    else:
+        model = torch.nn.DataParallel(model).cuda()
 
-    val_num = int(val_ratio * len(data_set))
+
+    data_set = COCODataset(cfg.DATA.TRAINSET, 
+                           '', 
+                           True, 
+                           transforms=build_transforms(), 
+                           clamp=False)
+
+    cudnn.benchmark = True
+
+    val_num = int(cfg.DATA.VAL_RATIO * len(data_set))
     train_num = len(data_set) - val_num
-    train, val = random_split(data_set, [train_num, val_num])
-    train_dataloader = DataLoader(train, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
-    optimizer = OptimizerScheduler(model, base_lr=lr, steps=steps)     
-    train_net(model, train_dataloader, optimizer, 'cuda', epoch, logg)
+    train_dataset, val_dataset = random_split(data_set, [train_num, val_num])
+    if distributed:
+        train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+    else:
+        train_sampler = None
+
+    train_dataloader = DataLoader(train_dataset, 
+                                  batch_size=cfg.SOLVER.BATCH_SIZE, 
+                                  shuffle=(train_sampler is None), 
+                                  num_workers=cfg.WORKERS, 
+                                  pin_memory=True,
+                                  sampler=train_sampler)
+
+    optimizer = OptimizerScheduler(model, cfg)     
+    train_net(cfg, 
+              ngpus_per_node, 
+              model, 
+              train_dataloader, 
+              optimizer, 
+              logg)
+
+def train(cfg):
+
+    if cfg.GPU is not ():
+        warnings.warn('You have chosen a specific GPU. This will completely '
+                'disable data parallelism.')
+
+    if cfg.DIST_URL == "env://" and cfg.WORLD_SIZE == -1:
+        cfg.WORLD_SIZE = int(os.environ["WORLD_SIZE"])
+
+    distributed = cfg.WORLD_SIZE > 1 or cfg.MULTIPROCESSING_DISTRIBUTED
+
+    ngpus_per_node = torch.cuda.device_count()
+    
+    if cfg.MULTIPROCESSING_DISTRIBUTED:
+        cfg.WORLD_SIZE = ngpus_per_node * cfg.WORLD_SIZE
+        torch.multiprocessing.spawn(train_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, distributed, cfg))
+    else:
+        train_worker(cfg.GPU, distributed, cfg)
+
 
 if __name__=='__main__':
-    train()
+    from yacs.config import CfgNode as CN
+    _C = CN()
+    _C.GPU = ()
+    _C.DIST_URL = "env://" #'tcp://224.66.41.62:23456'
+    _C.WORLD_SIZE = -1
+    _C.MULTIPROCESSING_DISTRIBUTED = True
+    _C.RANK = -1
+    _C.DIST_BACKEND = 'nccl'
+    _C.WORKERS = 8
+
+    _C.DATA = CN()
+    _C.DATA.TRAINSET = "/core1/data/home/niuwenhao/data/tiny_bg.json"
+    _C.DATA.VAL_RATIO = 0.1
+
+    _C.SOLVER = CN()
+    _C.SOLVER.LR = 0.1
+    _C.SOLVER.BATCH_SIZE = 4
+    _C.SOLVER.STEPS = (100, 200, 300)
+    _C.SOLVER.EPOCH = 10
+    _C.SOLVER.MOMENTUM = 0.9
+    _C.SOLVER.WEIGHT_DECAY = 1e-4
+
+    cfg = _C
+
+    train(cfg)
         

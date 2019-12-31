@@ -12,7 +12,7 @@ class GeneralizedFCN(nn.Module):
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
         
-        res = self.body(images).squeeze(0).squeeze(0)
+        res = self.body(images)
         if self.training:
             # TODO: add mask matching strategy for multiple masks
             #targets_m = []
