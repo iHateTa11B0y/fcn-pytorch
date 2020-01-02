@@ -1,6 +1,41 @@
 import sys
+from collections import defaultdict
+from collections import deque
+import torch
+
 CURSOR_UP_ONE = '\x1b[1A' 
 ERASE_LINE = '\x1b[2K'
+
+class SmoothedValue(object):
+    """Track a series of values and provide access to smoothed values over a
+    window or the global series average.
+    """
+
+    def __init__(self, window_size=20):
+        self.deque = deque(maxlen=window_size)
+        self.series = []
+        self.total = 0.0
+        self.count = 0
+
+    def update(self, value):
+        self.deque.append(value)
+        self.series.append(value)
+        self.count += 1
+        self.total += value
+
+    @property
+    def median(self):
+        d = torch.tensor(list(self.deque))
+        return d.median().item()
+
+    @property
+    def avg(self):
+        d = torch.tensor(list(self.deque))
+        return d.mean().item()
+
+    @property
+    def global_avg(self):
+        return self.total / self.count
 
 class Logger(object):
     def __init__(self):
@@ -11,15 +46,19 @@ class Logger(object):
         self.multiprocessing_cnt = 1
         self.last_iter = 0
         self.last_cnt = self.multiprocessing_cnt
+        self.interval = 20
 
     def add(self, name):
-        self.log_info[name] = []
+        self.log_info[name] = SmoothedValue(self.interval)
 
     def get(self, name):
         return self.log_info[name]
 
     def set_multiprocessing_cnt(self, v):
         self.multiprocessing_cnt = v
+
+    def set_interval(self, interval):
+        self.interval = interval
 
     def log(self, iteration, **kwargs):
 
@@ -31,7 +70,7 @@ class Logger(object):
 
         for k, v in kwargs.items():
             if k in self.log_info:
-                self.log_info[k].append(v)
+                self.log_info[k].update(v)
             else:
                 print('unknow log key word "{}". pls add first.'.format(k))
                 raise ValueError
@@ -45,8 +84,8 @@ class Logger(object):
         if len(self.log_info) <= 0:
             return
         if not flush:
-            print('#[iter {:<5d}] '.format(self.iter-flash_back))
-            print({k:v[-1-flash_back] for k,v in self.log_info.items()})
+            sys.stdout.write('#[iter {:<5d}] '.format(self.iter-flash_back))
+            sys.stdout.write(str({k:[v.avg, v.median] for k,v in self.log_info.items()}))
         else:
             s = '\n+' + '-' * 62 + '+\n|' + 'iter {:<57d}'.format(self.iter) + '|\n' + '+' + '-' * 62 + '+\n'
             line = ['', '', '', '', '', '']

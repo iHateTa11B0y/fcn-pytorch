@@ -13,12 +13,13 @@ class GeneralizedFCN(nn.Module):
             raise ValueError("In training mode, targets should be passed")
         
         res = self.body(images)
+
         if self.training:
             # TODO: add mask matching strategy for multiple masks
             #targets_m = []
             #for m in targets.get_field('masks'):
             #    targets_m.append(m.get_mask_tensor())
-            loss = F.binary_cross_entropy_with_logits(res, targets.unsqueeze(1).float())
+            loss = F.binary_cross_entropy_with_logits(res, targets)
             return {'mask_loss': loss}
 
         return res

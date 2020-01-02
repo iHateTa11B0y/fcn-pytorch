@@ -202,18 +202,25 @@ class COCODataset(CocoDetection):
             #self.show_image(img, target)
         #print(len(target))
         target_m = []
+        if len(target.get_field('masks')) > 1:
+            print(anno[0]['image_id'])
         for m in target.get_field('masks'):
-            target_m.append(m.get_mask_tensor().unsqueeze(0))
-        masks_target = torch.cat(target_m, dim=0).squeeze(0)
+            target_m.append(m.get_mask_tensor().float().unsqueeze(0))
+        masks_target = torch.cat(target_m, dim=0)
+        masks_target = (torch.sum(masks_target, dim=0) > 0).float().unsqueeze(0)
         return img, masks_target, idx
 
 
 if __name__=='__main__':
     import cv2
+    import sys
     from transforms import build_transforms
-    df = '/home/core/tiny_bg.json'
+    df = '/core1/data/home/niuwenhao/workspace/data/detection/door_all_new.json'
     cd = COCODataset(df, '', True, transforms=build_transforms(),clamp=False)
     for im, targets, idx in cd:
+        sys.stdout.write('{} / {}\r'.format(idx, len(cd)))
+        sys.stdout.flush()
+        continue
         print(im.shape, targets.get_field('masks').get_mask_tensor().shape)
         for m in targets.get_field('masks'):
             show = 255 * im * m.get_mask_tensor()

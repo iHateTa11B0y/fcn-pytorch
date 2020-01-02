@@ -1,5 +1,9 @@
 import warnings
 import os
+import sys
+import logging
+import time
+import datetime
 from coco import COCODataset
 import torch
 from generalized_fcn import GeneralizedFCN
@@ -60,9 +64,13 @@ def train_net(
               logg,
               ):
     model.train()
+    start_training_time = time.time()
+    end = time.time()
+    
     for i in range(cfg.SOLVER.EPOCH):
         epoch_iter = len(data_loader)
         for iteration, (images, targets, _) in enumerate(data_loader):
+            data_time = time.time() - end
             total_iter = i * epoch_iter + iteration
             if cfg.GPU is not None:
                 images = images.cuda(cfg.GPU, non_blocking=True)
@@ -77,12 +85,31 @@ def train_net(
             
             loss_dict_reduced = reduce_loss_dict(loss_dict)
             losses_reduced = sum(loss for loss in loss_dict_reduced.values())
-            logg.log(total_iter, loss=losses_reduced.item(), lr=optimizer.lr)
+            batch_time = time.time() - end       
+            end = time.time()
+            logg.log(
+                    total_iter, 
+                    loss=losses_reduced.item(), 
+                    lr=optimizer.lr,
+                    data_time=data_time,
+                    batch_time=batch_time,
+                    )
 
-            if total_iter % 20 == 0 and torch.distributed.get_rank() == 0:
-                logg.wait(total_iter, flush=False)
+            if total_iter % logg.interval == 0 and torch.distributed.get_rank() == 0:
+                eta = (epoch_iter * cfg.SOLVER.EPOCH - total_iter) * logg.get('batch_time').global_avg
+                eta_string = str(datetime.timedelta(seconds=int(eta)))
+                info = {
+                        'iter': total_iter, 
+                        'loss': '{:.8f}'.format(logg.get('loss').median), 
+                        'lr': '{:.4f}'.format(logg.get('lr').median), 
+                        'data': '{:.4f}'.format(logg.get('data_time').median), 
+                        'eta': eta_string, 
+                        'mem': '{} MiB'.format(int(torch.cuda.max_memory_allocated() / 1024.0 / 1024.0))
+                        }
+                #sys.stdout.write(str(info)+'\n')
+                print(info)
 
-        if not cfg.MULTIPROCESSING_DISTRIBUTED or (cfg.MULTIPROCESSING_DISTRIBUTED and cfg.RANK % ngpus_per_node == 0):
+        if torch.distributed.get_rank() == 0:
             torch.save(model.state_dict(), cfg.OUTPUT+'/model_epoch_{}.pth'.format(i))
 
 def train_worker(gpu, ngpus_per_node, distributed, cfg):
@@ -90,6 +117,9 @@ def train_worker(gpu, ngpus_per_node, distributed, cfg):
     logg = Logger()
     logg.add('loss')
     logg.add('lr')
+    logg.add('data_time')
+    logg.add('batch_time')
+    
 
     cfg.GPU = gpu
 
@@ -197,7 +227,7 @@ if __name__=='__main__':
     _C.SOLVER = CN()
     _C.SOLVER.LR = 0.02
     _C.SOLVER.BATCH_SIZE = 4
-    _C.SOLVER.STEPS = (16000, 20000)
+    _C.SOLVER.STEPS = (64000, 80000)
     _C.SOLVER.EPOCH = 12
     _C.SOLVER.MOMENTUM = 0.9
     _C.SOLVER.WEIGHT_DECAY = 1e-4
