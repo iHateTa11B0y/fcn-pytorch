@@ -32,6 +32,7 @@ class Infer(object):
     def eval_res(self, segm, gt):
         num_mismatch = []
         iou_mismatch = []
+        urls = []
         ious = []
 
         res_n = {}
@@ -40,7 +41,7 @@ class Infer(object):
             res_n[r['image_id']] = r['segmentation']
 
         for i in gt['images']:
-            gt_n[i['id']] = {'height': i['height'], 'width': i['width'],}
+            gt_n[i['id']] = {'height': i['height'], 'width': i['width'],'file_name': i['file_name']}
 
         for a in gt['annotations']:
             if a['image_id'] not in gt_n:
@@ -55,11 +56,14 @@ class Infer(object):
                     num_mismatch.append(a['image_id'])
                     continue
                 iou = mask_utils.iou([res_n[a['image_id']]], rle, [False])
-                if iou[0][0] < 0.9:
+                if iou[0][0] < 0.8:
                     iou_mismatch.append(a['id'])
+                    urls.append(gt_n[a['image_id']]['file_name'])
                 ious.append(iou[0][0])
-        print('iou mismatch objs (iou<0.9):')
+        print('iou mismatch objs (iou<0.8):')
         print(iou_mismatch)
+        with open('err.txt', 'w') as f:
+            f.write('\n'.join(urls))
         print('num mismatch objs:')
         print(num_mismatch)
         print('mean iou:',torch.tensor(ious).mean().item())
