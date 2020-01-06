@@ -13,23 +13,7 @@ from transforms import build_transforms
 from torch.utils.data import DataLoader, random_split
 from optimizer import OptimizerScheduler
 from logger import Logger
-
-def get_world_size():
-    if not torch.distributed.is_available():
-        return 1
-    if not torch.distributed.is_initialized():
-        return 1
-    return torch.distributed.get_world_size()
-
-def get_rank():
-    if not torch.distributed.is_available():
-        return 0
-    if not torch.distributed.is_initialized():
-        return 0
-    return torch.distributed.get_rank()
-
-def is_main_process():
-    return get_rank() == 0
+from comm import synchronize, get_world_size, get_rank, is_main_process
 
 def reduce_loss_dict(loss_dict):
     """
@@ -136,7 +120,7 @@ def train_worker(gpu, ngpus_per_node, distributed, cfg):
                 init_method=cfg.DIST_URL,
                 world_size=cfg.WORLD_SIZE, 
                 rank=cfg.RANK)
-
+        synchronize()
 
     model = GeneralizedFCN()
 
@@ -165,9 +149,10 @@ def train_worker(gpu, ngpus_per_node, distributed, cfg):
 
     cudnn.benchmark = True
 
-    val_num = int(cfg.DATA.VAL_RATIO * len(data_set))
-    train_num = len(data_set) - val_num
-    train_dataset, val_dataset = random_split(data_set, [train_num, val_num])
+    #val_num = int(cfg.DATA.VAL_RATIO * len(data_set))
+    #train_num = len(data_set) - val_num
+    #train_dataset, val_dataset = random_split(data_set, [train_num, val_num])
+    train_dataset = data_set
     if distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     else:

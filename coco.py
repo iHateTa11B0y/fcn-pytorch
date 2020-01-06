@@ -183,6 +183,8 @@ class COCODataset(CocoDetection):
                 h, wid, _c = img.shape
         target = BoxList(boxes, (wid, h), mode="xywh").convert("xyxy")
 
+        ori_size = (wid, h)
+
         classes = [obj["category_id"] for obj in anno]
         classes = [self.json_category_id_to_contiguous_id[c] for c in classes]
         classes = torch.tensor(classes)
@@ -208,7 +210,7 @@ class COCODataset(CocoDetection):
             target_m.append(m.get_mask_tensor().float().unsqueeze(0))
         masks_target = torch.cat(target_m, dim=0)
         masks_target = (torch.sum(masks_target, dim=0) > 0).float().unsqueeze(0)
-        return img, masks_target, idx
+        return img, masks_target, [ori_size, self.ids[idx]]
 
 
 if __name__=='__main__':
