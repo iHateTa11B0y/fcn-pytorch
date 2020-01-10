@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from unet import Unet
+from .unet import Unet
 from torch.nn import functional as F
 
 class GeneralizedFCN(nn.Module):

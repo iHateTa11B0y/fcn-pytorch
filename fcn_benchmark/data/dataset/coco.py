@@ -10,7 +10,7 @@ import numpy as np
 from functools import wraps
 from cvtorch.cvBox import BoxList
 import pycocotools.mask as mask_utils
-from segmentation_mask import SegmentationMask
+from fcn_benchmark.utils.segmentation_mask import SegmentationMask
 
 def retry(func):
     @wraps(func)

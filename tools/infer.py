@@ -1,10 +1,10 @@
 import torch
 import numpy as np
-from generalized_fcn import GeneralizedFCN
+from fcn_benchmark.modeling.generalized_fcn import GeneralizedFCN
 import cv2
-from transforms import build_transforms
+from fcn_benchmark.data.transforms import build_transforms
 from collections import OrderedDict
-from utils import crop_weight, to_binary_mask
+from fcn_benchmark.utils.util import crop_weight, to_binary_mask
 import pycocotools.mask as mask_utils
 
 class Infer(object):

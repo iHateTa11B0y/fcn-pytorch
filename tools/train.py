@@ -4,16 +4,16 @@ import sys
 import logging
 import time
 import datetime
-from coco import COCODataset
+from fcn_benchmark.data.dataset.coco import COCODataset
 import torch
-from generalized_fcn import GeneralizedFCN
+from fcn_benchmark.modeling.generalized_fcn import GeneralizedFCN
 from torch import optim
 import torch.backends.cudnn as cudnn
-from transforms import build_transforms
+from fcn_benchmark.data.transforms import build_transforms
 from torch.utils.data import DataLoader, random_split
-from optimizer import OptimizerScheduler
-from logger import Logger
-from comm import synchronize, get_world_size, get_rank, is_main_process
+from fcn_benchmark.utils.optimizer import OptimizerScheduler
+from fcn_benchmark.utils.logger import Logger
+from fcn_benchmark.utils.comm import synchronize, get_world_size, get_rank, is_main_process
 
 def reduce_loss_dict(loss_dict):
     """
