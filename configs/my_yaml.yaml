@@ -1,0 +1,15 @@
+OUTPUT: weights
+
+DATA:
+    TRAINSET: "/core1/data/home/niuwenhao/workspace/data/detection/door_all_new.json"
+    TESTSET: "/core1/data/home/niuwenhao/data/tiny_bg.json"
+
+SOLVER:
+    LR: 0.02
+    BATCH_SIZE: 4
+    STEPS: (64000, 80000)
+    EPOCH: 12
+    MOMENTUM: 0.9
+    WEIGHT_DECAY: 0.0001
+
+TEST_WEIGHT: '/home/niuwenhao/Repo/fcns/weights/model_epoch_9.pth'

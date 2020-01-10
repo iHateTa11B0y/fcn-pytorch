@@ -194,30 +194,29 @@ def train(cfg):
 
 
 if __name__=='__main__':
-    from yacs.config import CfgNode as CN
-    _C = CN()
-    _C.GPU = ()
-    _C.DIST_URL = "env://" #'tcp://224.66.41.62:23456'
-    _C.WORLD_SIZE = -1
-    _C.MULTIPROCESSING_DISTRIBUTED = True
-    _C.RANK = -1
-    _C.DIST_BACKEND = 'nccl'
-    _C.WORKERS = 8
-    _C.OUTPUT = 'weights'
-
-    _C.DATA = CN()
-    _C.DATA.TRAINSET = "/core1/data/home/niuwenhao/workspace/data/detection/door_all_new.json"
-    _C.DATA.VAL_RATIO = 0.1
-
-    _C.SOLVER = CN()
-    _C.SOLVER.LR = 0.02
-    _C.SOLVER.BATCH_SIZE = 4
-    _C.SOLVER.STEPS = (64000, 80000)
-    _C.SOLVER.EPOCH = 12
-    _C.SOLVER.MOMENTUM = 0.9
-    _C.SOLVER.WEIGHT_DECAY = 1e-4
+    from fcn_benchmark.config.defaults import _C 
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="training")
+    parser.add_argument(
+        "--config-file",
+        default="",
+        metavar="FILE",
+        help="path to config file",
+        type=str,
+    )
+    parser.add_argument("--local_rank", type=int, default=0)
+    parser.add_argument(
+        "opts",
+        help="Modify config options using the command-line",
+        default=None,
+        nargs=argparse.REMAINDER,
+    )
+    args = parser.parse_args() 
 
     cfg = _C
+    cfg.merge_from_file(args.config_file)
+    cfg.merge_from_list(args.opts)
 
     train(cfg)
-        
+
